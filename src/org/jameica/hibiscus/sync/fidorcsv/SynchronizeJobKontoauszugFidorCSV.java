@@ -15,6 +15,7 @@ import java.util.Collections;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.TimeZone;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
 import javax.annotation.Resource;
@@ -29,6 +30,7 @@ import org.eclipse.swt.widgets.Button;
 import org.eclipse.swt.widgets.Display;
 import org.eclipse.swt.widgets.Label;
 import org.eclipse.swt.widgets.Link;
+import org.eclipse.swt.widgets.MessageBox;
 import org.eclipse.swt.widgets.Shell;
 import org.eclipse.swt.widgets.Text;
 import org.eclipse.swt.widgets.Widget;
@@ -56,6 +58,7 @@ public class SynchronizeJobKontoauszugFidorCSV extends SynchronizeJobKontoauszug
 {
   static final String KEY_DOWNLOAD_PATH = "Download-Ordner";
   static final String KEY_AUTO_OPEN_LOGIN = "Loginseite automatisch öffnen";
+  static final String KEY_LAST_TRANSACTION_UPDATE = "key.last.transaction.update";
   
   private final static I18N i18n = Application.getPluginLoader().getPlugin(Plugin.class).getResources().getI18N();
   private static final SimpleDateFormat DATE_FORMAT = new SimpleDateFormat("dd.MM.yyyy");
@@ -112,9 +115,23 @@ public class SynchronizeJobKontoauszugFidorCSV extends SynchronizeJobKontoauszug
           return file.getName().endsWith("-Fidorpay-Transaktionen.csv") && file.lastModified() > mLastClickOnLink;
         });
         
+        if(csvFiles.length == 0 && handle.get().mSaldoCorrect != null) {
+          try {
+            Double saldo = parseSaldo(handle.get().mSaldoCorrect);
+            
+            if(saldo != null) {
+              konto.setSaldo(saldo);
+              konto.store();
+              
+              // Und per Messaging Bescheid geben, dass das Konto einen neuen Saldo hat     
+              Application.getMessagingFactory().sendMessage(new SaldoMessage(konto));
+            }
+          }catch(NumberFormatException nfe) {}
+        }
+        
         for(File csvFile : csvFiles) {
           Logger.info("Loading transactions from file: " + csvFile.getAbsolutePath());
-          translate(csvFile, konto);
+          translate(csvFile, konto, handle.get().mSaldoCorrect);
           
           if(!TESTING) {
             if(!csvFile.delete()) {
@@ -126,8 +143,62 @@ public class SynchronizeJobKontoauszugFidorCSV extends SynchronizeJobKontoauszug
     }
   }
   
-  private void translate(final File source, Konto konto) throws RemoteException, ParseException, ApplicationException {
-    final ArrayList<Umsatz> stack = new ArrayList<>();
+  private Double parseSaldo(final String saldo) {
+    Double endSaldo = null;
+    
+    if(saldo != null) {
+      try {
+        endSaldo = Double.parseDouble(saldo.replace(",", "."));
+      }catch(NumberFormatException nfe) {
+        final Display display = GUI.getDisplay();
+        display.syncExec(new Runnable() {
+          public void run() {
+            Shell shell = new Shell(display, SWT.PRIMARY_MODAL | SWT.SHEET);
+            
+            final MessageBox msg = new MessageBox(shell, SWT.ICON_ERROR | SWT.OK);
+            msg.setText("Fehler");
+            msg.setMessage("Der eingegebene Saldo '"+saldo+"' ist fehlerhaft.\nImport wird abgebrochen.");
+            
+            msg.open();
+          }
+        });
+      }
+    }
+        
+    return endSaldo;
+  }
+  
+  private void translate(final File source, final Konto konto, final String saldoCorrect) throws RemoteException, ParseException, ApplicationException {
+    Double endSaldo = null;
+    
+    if(saldoCorrect != null) {
+      endSaldo = parseSaldo(saldoCorrect);
+      
+      if(endSaldo == null) {
+        return;
+      }
+    }
+    
+    ArrayList<Umsatz> stack = new ArrayList<>();
+    
+    {      
+      final AtomicBoolean firstFidorCSV = new AtomicBoolean(konto.getSaldoDatum() != null && konto.getMeta(KEY_LAST_TRANSACTION_UPDATE, null) == null); 
+
+      if(konto.getSaldoDatum() == null || firstFidorCSV.get()) {
+        final AtomicReference<String> handle = new AtomicReference<String>(null);
+        
+        GUI.getDisplay().syncExec(new Runnable() {
+          public void run() {
+            handle.set(showSaldoDialog(saldoCorrect, firstFidorCSV.get()));
+          }
+        });
+        
+        if((endSaldo = parseSaldo(handle.get())) == null) {
+          return;
+        }
+      }
+    }
+    
     Date oldest = getStartDate(konto);
     
     BufferedReader in = null;
@@ -164,18 +235,6 @@ public class SynchronizeJobKontoauszugFidorCSV extends SynchronizeJobKontoauszug
           if(!listDatesAvailable.contains(date)) {
             listDatesAvailable.add(date);
           }
-          
-//        newUmsatz.setBetrag(...);
-//        newUmsatz.setDatum(...);
-//        newUmsatz.setGegenkontoBLZ(...); // das darf auch eine BIC sein
-//        newUmsatz.setGegenkontoName(...);
-//        newUmsatz.setGegenkontoNummer(...); // das darf auch eine IBAN sein
-//        newUmsatz.setSaldo(...); // Zwischensaldo
-//        newUmsatz.setValuta(...);
-//        newUmsatz.setZweck(...);
-//        newUmsatz.setZweck2(...);
-//        newUmsatz.setWeitereVerwendungszwecke(...);
-//        fetched.add(newUmsatz);
           
           for(String part : senderParts) {
             int index = part.indexOf(":")+1;
@@ -266,6 +325,7 @@ public class SynchronizeJobKontoauszugFidorCSV extends SynchronizeJobKontoauszug
       // if something went wrong we don't want to process
       // the CSV file, so clear all transactions
       stack.clear();
+      stack = null;
       e.printStackTrace();
     }finally {
       if(in != null) {
@@ -300,7 +360,7 @@ public class SynchronizeJobKontoauszugFidorCSV extends SynchronizeJobKontoauszug
     }
     
     // an empty or malformed CSV file must not be processed 
-    if(!stack.isEmpty()) {
+    if(stack != null && !stack.isEmpty()) {
       Double saldo = konto.getSaldo();
       
       // Wir holen uns die Umsaetze seit dem letzen Abruf von der Datenbank
@@ -386,6 +446,18 @@ public class SynchronizeJobKontoauszugFidorCSV extends SynchronizeJobKontoauszug
         }
       }
       
+      // calculate start saldo from current end saldo
+      // therefor we need to go through all new transactions
+      // and substract it's betrag from the end saldo
+      if(endSaldo != null) {
+        for(Umsatz umsatz : stack) {
+          endSaldo -= umsatz.getBetrag();
+        }
+        
+        saldo = endSaldo;
+        endSaldo = null;
+      }
+      
       for(Umsatz umsatz : stack) {
        /* boolean toContinue = false;
         
@@ -423,15 +495,29 @@ public class SynchronizeJobKontoauszugFidorCSV extends SynchronizeJobKontoauszug
         Application.getMessagingFactory().sendMessage(new ImportMessage(umsatz));
       }
       
-      if(hadTransactions) {
+      if(hadTransactions || endSaldo != null) {
+        if(endSaldo != null) {
+          saldo = endSaldo;
+        }
         // Zum Schluss sollte noch der neue Saldo des Kontos sowie das Datum des Abrufes
         // im Konto gespeichert werden
         konto.setSaldo(saldo); // gegen sinnvollen Wert ersetzen ;)
         konto.store();
         
+        konto.setMeta(KEY_LAST_TRANSACTION_UPDATE, DATE_FORMAT.format(konto.getSaldoDatum()));
         // Und per Messaging Bescheid geben, dass das Konto einen neuen Saldo hat     
         Application.getMessagingFactory().sendMessage(new SaldoMessage(konto));
       }
+    }
+    else if(stack != null && endSaldo != null) {
+      // if the user has entered an end saldo but no transaction were found
+      // we need to update the saldo of the konto, without saving it as 
+      konto.setSaldo(endSaldo); 
+      konto.store();
+      
+      konto.setMeta(KEY_LAST_TRANSACTION_UPDATE, DATE_FORMAT.format(konto.getSaldoDatum()));
+      // Und per Messaging Bescheid geben, dass das Konto einen neuen Saldo hat     
+      Application.getMessagingFactory().sendMessage(new SaldoMessage(konto));
     }
   }
   
@@ -442,7 +528,9 @@ public class SynchronizeJobKontoauszugFidorCSV extends SynchronizeJobKontoauszug
   private static final String URL_PATH_CSV_GENERATION = "/smart-account/transactions.csv?from={0}&time_selection=from_to&to={1}";
   
   private Date getStartDate(final Konto konto) throws RemoteException, ParseException {
-    Date fromDate = konto.getSaldoDatum();
+    final String lastUpdate = konto.getMeta(KEY_LAST_TRANSACTION_UPDATE, null);
+    
+    Date fromDate = lastUpdate != null && konto.getSaldoDatum() != null ? DATE_FORMAT.parse(lastUpdate) : konto.getSaldoDatum();
     
     if(fromDate == null) {
       final Calendar cal = Calendar.getInstance(TimeZone.getTimeZone("CET"));
@@ -453,13 +541,80 @@ public class SynchronizeJobKontoauszugFidorCSV extends SynchronizeJobKontoauszug
     }
     else {
       Calendar cal = Calendar.getInstance(TimeZone.getTimeZone("CET"));
-      cal.setTime(konto.getSaldoDatum());
+      cal.setTime(fromDate);
       cal.add(Calendar.DAY_OF_YEAR, -5);
       
-      fromDate = cal.getTime();      
+      fromDate = cal.getTime();
     }
     
     return fromDate;
+  }
+  
+  private String showSaldoDialog(final String initialSaldo, final boolean firstFidorCSV) {
+    final AtomicReference<String> result = new AtomicReference<String>(null);
+    
+    Display display = GUI.getDisplay();
+    Shell shell = new Shell(display, SWT.PRIMARY_MODAL | SWT.SHEET);
+    shell.setText("Fidor CSV-Download");
+    
+    GridLayout gridLayout = new GridLayout();
+    gridLayout.numColumns = 2;
+    gridLayout.horizontalSpacing = 7;
+    gridLayout.verticalSpacing = 7;
+    gridLayout.marginWidth = 10;
+    gridLayout.marginHeight = 10;
+    
+    shell.setLayout(gridLayout);
+
+    Label info = new Label(shell, SWT.WRAP);
+    info.setText("Sie rufen die Umsätze zum ersten Mal " + (firstFidorCSV ? "mit Fidor-CSV " : "") + "ab, bitte\ngeben Sie den aktuellen Saldo des Kontos an,\nda dieser nicht ausgelesen werden kann.");
+    
+    GridData gridData = new GridData();
+    gridData.horizontalSpan = 2;
+    info.setLayoutData(gridData);
+    
+    final Label labelSaldo = new Label(shell, SWT.HORIZONTAL);
+    labelSaldo.setText("Kontostand am "+DATE_FORMAT.format(new Date())+":");
+    
+    gridData = new GridData();
+    gridData.verticalIndent = 5;
+    labelSaldo.setLayoutData(gridData);
+    
+    final Text saldoCurrent = new Text(shell, SWT.SINGLE);
+    saldoCurrent.setText(initialSaldo != null ? initialSaldo : "");
+    
+    gridData = new GridData(GridData.FILL_HORIZONTAL);
+    gridData.verticalIndent = 5;
+    saldoCurrent.setLayoutData(gridData);
+    
+    Button okay = new Button(shell, SWT.PUSH);
+    okay.setEnabled(false);
+    okay.setText("Saldo übernehmen");
+    okay.addSelectionListener(new SelectionAdapter() {
+      @Override
+      public void widgetSelected(SelectionEvent e) {
+        result.set(saldoCurrent.getText());
+        
+        shell.dispose();
+      }
+    });
+    
+    gridData = new GridData(GridData.HORIZONTAL_ALIGN_END);
+    gridData.horizontalSpan = 2;
+    
+    okay.setLayoutData(gridData);
+    
+    saldoCurrent.addModifyListener(e -> {
+      okay.setEnabled(!((Text)e.widget).getText().trim().isEmpty());
+    });
+    
+    shell.setDefaultButton(okay);
+    shell.pack();
+    shell.open();
+    
+    waitForShell(shell, display);
+    
+    return result.get();
   }
   
   private Result showLinkDialog(final Konto konto) throws RemoteException, ParseException {
@@ -494,11 +649,56 @@ public class SynchronizeJobKontoauszugFidorCSV extends SynchronizeJobKontoauszug
     gridData.verticalIndent = 5;
     separator.setLayoutData(gridData);
     
+    int indent = 5;
+    
+    final Text saldoCurrent;
+    final Button saldoCorrect;
+    
+    if(konto.getSaldoDatum() != null && konto.getMeta(KEY_LAST_TRANSACTION_UPDATE, null) != null) {
+      saldoCorrect = new Button(shell, SWT.CHECK);
+      saldoCorrect.setText("Saldo korrigieren");
+      gridData = new GridData(GridData.FILL_HORIZONTAL);
+      gridData.verticalIndent = indent;
+      gridData.horizontalSpan = 4;
+      
+      saldoCorrect.setLayoutData(gridData);
+      
+      final Label labelSaldo = new Label(shell, SWT.HORIZONTAL);
+      labelSaldo.setText("Kontostand am "+DATE_FORMAT.format(new Date())+":");
+      
+      gridData = new GridData();
+      gridData.horizontalSpan = 2;
+      labelSaldo.setLayoutData(gridData);
+      labelSaldo.setEnabled(false);
+      
+      saldoCurrent = new Text(shell, SWT.SINGLE);
+      saldoCurrent.setText(String.format("%.2f", konto.getSaldo()));
+      saldoCurrent.setEnabled(false);
+      
+      gridData = new GridData(GridData.FILL_HORIZONTAL);
+      gridData.horizontalSpan = 2;
+      saldoCurrent.setLayoutData(gridData);
+      
+      indent = 0;
+      
+      saldoCorrect.addSelectionListener(new SelectionAdapter() {
+        @Override
+        public void widgetSelected(SelectionEvent e) {
+          labelSaldo.setEnabled((((Button)e.widget).getSelection()));
+          saldoCurrent.setEnabled(labelSaldo.isEnabled());
+        }
+      });
+    }
+    else {
+      saldoCurrent = null;
+      saldoCorrect = null;
+    }
+    
     Label label = new Label(shell, SWT.HORIZONTAL);
     label.setText("Download-Ordner:");
     
     gridData = new GridData();
-    gridData.verticalIndent = 5;
+    gridData.verticalIndent = indent;
     gridData.horizontalSpan = 2;
     label.setLayoutData(gridData);
     
@@ -506,7 +706,7 @@ public class SynchronizeJobKontoauszugFidorCSV extends SynchronizeJobKontoauszug
     downloadP.setText(getProperty(konto, KEY_DOWNLOAD_PATH, System.getProperty("user.home")+File.separator+"Downloads"));
     
     gridData = new GridData(GridData.FILL_HORIZONTAL);
-    gridData.verticalIndent = 5;
+    gridData.verticalIndent = indent;
     gridData.horizontalSpan = 2;
     downloadP.setLayoutData(gridData);
     
@@ -556,7 +756,7 @@ public class SynchronizeJobKontoauszugFidorCSV extends SynchronizeJobKontoauszug
           e1.printStackTrace();
         }
         
-        result.setProceed(downloadP.getText());
+        result.setProceed(downloadP.getText(), saldoCorrect != null && saldoCorrect.getSelection() ? saldoCurrent.getText() : null);
         shell.dispose();
       }
     });
@@ -566,6 +766,7 @@ public class SynchronizeJobKontoauszugFidorCSV extends SynchronizeJobKontoauszug
     
     okay.setLayoutData(gridData);
     
+    shell.setDefaultButton(okay);
     shell.pack();
     shell.open();
     
@@ -573,15 +774,19 @@ public class SynchronizeJobKontoauszugFidorCSV extends SynchronizeJobKontoauszug
       Program.launch(URL_BASE+URL_PATH_LOGIN);
     }
     
-    while (!shell.isDisposed()) {
-        if (!display.readAndDispatch()) {
-            display.sleep();
-        }
-    }
+    waitForShell(shell, display);
     
     return result;
   }
 
+  private void waitForShell(final Shell shell, final Display display) {
+    while (!shell.isDisposed()) {
+      if (!display.readAndDispatch()) {
+          display.sleep();
+      }
+    }    
+  }
+  
   private static String getPath(String path, String... replace) {
     if(replace != null) {
       for(int i = 0; i < replace.length; i++) {
@@ -646,15 +851,27 @@ public class SynchronizeJobKontoauszugFidorCSV extends SynchronizeJobKontoauszug
   private static final class Result {
     private boolean mProgress;
     private String mDownloadPath;
+    private String mSaldoCorrect;
     
     private Result(final boolean progress) {
       mProgress = progress;
       mDownloadPath = null;
     }
     
-    private void setProceed(final String downloadPath) {
+    private void setProceed(final String downloadPath, final String saldoCorrect) {
       mProgress = true;
       mDownloadPath = downloadPath;
+      mSaldoCorrect = saldoCorrect;
+    }
+  }
+  
+  private static final class ResultDate {
+    private boolean mIsFirstAccess;
+    private Date mDate;
+    
+    private ResultDate(final boolean isFirstAccess, final Date date) {
+      mIsFirstAccess = isFirstAccess;
+      mDate = date;
     }
   }
   
