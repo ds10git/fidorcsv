@@ -131,9 +131,9 @@ public class SynchronizeJobKontoauszugFidorCSV extends SynchronizeJobKontoauszug
         
         for(File csvFile : csvFiles) {
           Logger.info("Loading transactions from file: " + csvFile.getAbsolutePath());
-          translate(csvFile, konto, handle.get().mSaldoCorrect);
+          boolean delete = translate(csvFile, konto, handle.get().mSaldoCorrect);
           
-          if(!TESTING) {
+          if(delete && !TESTING) {
             if(!csvFile.delete()) {
               csvFile.deleteOnExit();
             }
@@ -168,14 +168,15 @@ public class SynchronizeJobKontoauszugFidorCSV extends SynchronizeJobKontoauszug
     return endSaldo;
   }
   
-  private void translate(final File source, final Konto konto, final String saldoCorrect) throws RemoteException, ParseException, ApplicationException {
+  private boolean translate(final File source, final Konto konto, final String saldoCorrect) throws RemoteException, ParseException, ApplicationException {
+	  boolean result = true;
     Double endSaldo = null;
     
     if(saldoCorrect != null) {
       endSaldo = parseSaldo(saldoCorrect);
       
       if(endSaldo == null) {
-        return;
+        return false;
       }
     }
     
@@ -194,7 +195,7 @@ public class SynchronizeJobKontoauszugFidorCSV extends SynchronizeJobKontoauszug
         });
         
         if((endSaldo = parseSaldo(handle.get())) == null) {
-          return;
+          return false;
         }
       }
     }
@@ -278,7 +279,7 @@ public class SynchronizeJobKontoauszugFidorCSV extends SynchronizeJobKontoauszug
             }
           }
           
-          String zweck = null;
+          String zweck = "";
           
           if(index != -1) {
             if(parts[1].length() > index+name.length()+1) {
@@ -326,6 +327,8 @@ public class SynchronizeJobKontoauszugFidorCSV extends SynchronizeJobKontoauszug
       // the CSV file, so clear all transactions
       stack.clear();
       stack = null;
+      result = false;
+      Logger.error("Fehler beim Einlesen der CSV-Datei '" + source.getAbsolutePath() + "' ", e);
       e.printStackTrace();
     }finally {
       if(in != null) {
@@ -519,6 +522,8 @@ public class SynchronizeJobKontoauszugFidorCSV extends SynchronizeJobKontoauszug
       // Und per Messaging Bescheid geben, dass das Konto einen neuen Saldo hat     
       Application.getMessagingFactory().sendMessage(new SaldoMessage(konto));
     }
+    
+    return result;
   }
   
   private long mLastClickOnLink = 0;
