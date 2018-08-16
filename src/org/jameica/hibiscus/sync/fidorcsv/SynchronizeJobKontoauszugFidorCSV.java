@@ -206,14 +206,16 @@ public class SynchronizeJobKontoauszugFidorCSV extends SynchronizeJobKontoauszug
     
     final ArrayList<Date> listDatesAvailable = new ArrayList<>();
     
+    String line = null;
+    int count = 0;
+    
     try {
       in = new BufferedReader(new InputStreamReader(new FileInputStream(source), "UTF-8"));
-      
-      String line = null;
       
       in.readLine();
       
       while((line = in.readLine()) != null) {
+        count++;
         String[] parts = line.split(";");
         
         if(parts.length == 4) {
@@ -305,7 +307,7 @@ public class SynchronizeJobKontoauszugFidorCSV extends SynchronizeJobKontoauszug
               ArrayList<String> zwecke = new ArrayList<>();
               
               for(int i = 70; i < zweck.length(); i += 35) {
-              zwecke.add(zweck.substring(i,Math.min(zweck.length(), i+35)));
+                zwecke.add(zweck.substring(i,Math.min(zweck.length(), i+35)));
               }
               
               newUmsatz.setWeitereVerwendungszwecke(zwecke.toArray(new String[zwecke.size()]));
@@ -318,7 +320,7 @@ public class SynchronizeJobKontoauszugFidorCSV extends SynchronizeJobKontoauszug
             newUmsatz.setZweck(zweck);
           }
           
-          newUmsatz.setBetrag(Double.parseDouble(parts[3].replace(",", ".")));
+          newUmsatz.setBetrag(Double.parseDouble(parts[3].replace(".", "").replace(",", ".")));
           stack.add(0, newUmsatz);
         }
       }
@@ -328,6 +330,7 @@ public class SynchronizeJobKontoauszugFidorCSV extends SynchronizeJobKontoauszug
       stack.clear();
       stack = null;
       result = false;
+      Logger.error("Fehlerhafter Umsatz in Zeile " + count + ": " + line);
       Logger.error("Fehler beim Einlesen der CSV-Datei '" + source.getAbsolutePath() + "' ", e);
       e.printStackTrace();
     }finally {
