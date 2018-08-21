@@ -4,7 +4,7 @@ hibiscus.sync.fidorcsv
 Ein Plugin zum halbautomatischen Abruf der Umsätze bei der Fidor Bank mit Hibiscus.
 
 
-##Installation
+## Installation
 
 - Öffnen Sie die Installation von Plugins in Jameica über das Menü `Datei->Plugins online suchen...`
 - Klicken Sie dann auf `Repositories bearbeiten`
@@ -21,7 +21,7 @@ Das Plugin _Fidor-CSV_ wird angezeigt und kann über den Klick auf den Knopf `In
 Nach einem Neustart von Jameica sollte für Konten bei der Fidor Bank als Zugangsweg _Fidor-CSV_ automatisch eingestellt sein, so dass die Synchronisierung direkt gestartet werden kann.
 
 
-##Konto anlegen
+## Konto anlegen
 
 Wenn Sie ein neues Konto bei der Fidor Bank in Hibiscus anlegen möchten, klicken Sie auf `Konten` und dort dann auf `Konto manuell anlegen`.
 
