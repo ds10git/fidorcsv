@@ -3,7 +3,7 @@
 <plugin xmlns="http://www.willuhn.de/schema/jameica-plugin"
         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
         xsi:schemaLocation="http://www.willuhn.de/schema/jameica-plugin http://www.willuhn.de/schema/jameica-plugin-1.2.xsd"
-        name="hibiscus.sync.fidorcsv" version="0.2.0" class="org.jameica.hibiscus.sync.fidorcsv.Plugin">
+        name="hibiscus.sync.fidorcsv" version="0.3.0" class="org.jameica.hibiscus.sync.fidorcsv.Plugin">
 
   <description>Hibiscus-Support für Fidor CSV-Import</description>
   <url>http://hibiscus.tvbrowser.org/download/hibiscus.sync.fidorcsv.zip</url>

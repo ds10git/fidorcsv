@@ -27,6 +27,7 @@ import org.eclipse.swt.layout.GridData;
 import org.eclipse.swt.layout.GridLayout;
 import org.eclipse.swt.program.Program;
 import org.eclipse.swt.widgets.Button;
+import org.eclipse.swt.widgets.DirectoryDialog;
 import org.eclipse.swt.widgets.Display;
 import org.eclipse.swt.widgets.Label;
 import org.eclipse.swt.widgets.Link;
@@ -675,7 +676,6 @@ public class SynchronizeJobKontoauszugFidorCSV extends SynchronizeJobKontoauszug
       labelSaldo.setText("Kontostand am "+DATE_FORMAT.format(new Date())+":");
       
       gridData = new GridData();
-      gridData.horizontalSpan = 2;
       labelSaldo.setLayoutData(gridData);
       labelSaldo.setEnabled(false);
       
@@ -684,7 +684,7 @@ public class SynchronizeJobKontoauszugFidorCSV extends SynchronizeJobKontoauszug
       saldoCurrent.setEnabled(false);
       
       gridData = new GridData(GridData.FILL_HORIZONTAL);
-      gridData.horizontalSpan = 2;
+      gridData.horizontalSpan = 3;
       saldoCurrent.setLayoutData(gridData);
       
       indent = 0;
@@ -707,16 +707,36 @@ public class SynchronizeJobKontoauszugFidorCSV extends SynchronizeJobKontoauszug
     
     gridData = new GridData();
     gridData.verticalIndent = indent;
-    gridData.horizontalSpan = 2;
     label.setLayoutData(gridData);
     
-    Text downloadP = new Text(shell, SWT.SINGLE);
+    final Text downloadP = new Text(shell, SWT.SINGLE);
     downloadP.setText(getProperty(konto, KEY_DOWNLOAD_PATH, System.getProperty("user.home")+File.separator+"Downloads"));
     
     gridData = new GridData(GridData.FILL_HORIZONTAL);
     gridData.verticalIndent = indent;
-    gridData.horizontalSpan = 2;
     downloadP.setLayoutData(gridData);
+    
+    Button select = new Button(shell, SWT.PUSH);
+    select.setText("Ordner auswählen");
+    
+    gridData = new GridData(GridData.HORIZONTAL_ALIGN_END);
+    select.setLayoutData(gridData);
+    
+    select.addSelectionListener(new SelectionAdapter() {
+      @Override
+      public void widgetSelected(SelectionEvent e) {
+        final String filterPath = new File(downloadP.getText()).isDirectory() ? downloadP.getText() : System.getProperty("user.home");  
+        
+        DirectoryDialog dialog = new DirectoryDialog(shell, SWT.OPEN);
+        dialog.setFilterPath(filterPath);
+        
+        String result = dialog.open();
+        
+        if(result != null && new File(result).isDirectory()) {
+          downloadP.setText(result);
+        }
+      }
+    });
     
     SelectionAdapter openLinks = new SelectionAdapter() {
       @Override
@@ -870,16 +890,6 @@ public class SynchronizeJobKontoauszugFidorCSV extends SynchronizeJobKontoauszug
       mProgress = true;
       mDownloadPath = downloadPath;
       mSaldoCorrect = saldoCorrect;
-    }
-  }
-  
-  private static final class ResultDate {
-    private boolean mIsFirstAccess;
-    private Date mDate;
-    
-    private ResultDate(final boolean isFirstAccess, final Date date) {
-      mIsFirstAccess = isFirstAccess;
-      mDate = date;
     }
   }
   
