@@ -3,20 +3,25 @@ hibiscus.sync.fidorcsv
 
 Ein Plugin zum halbautomatischen Abruf der Umsätze bei der Fidor Bank mit Hibiscus.
 
-
 ## Installation
+
+- Öffnen Sie die Installation von Plugins in Jameica über das Menü `Datei->Plugins online suchen...`
+- Wählen Sie den Tab `Verfügbare Plugins`
+- Als URL wählen Sie http://www.open4me.de/hibiscus/
+- Das Plugin _hibiscus.sync.fidorcsv_ wird angezeigt (evtl. muss nach unten gescrollt werden) und kann über den Klick auf den Knopf `Installieren...` installiert werden.
+
+Nach einem Neustart von Jameica sollte für Konten bei der Fidor Bank als Zugangsweg _Fidor-CSV_ automatisch eingestellt sein, so dass die Synchronisierung direkt gestartet werden kann.
+
+
+## Installation - Alternativ 
 
 - Öffnen Sie die Installation von Plugins in Jameica über das Menü `Datei->Plugins online suchen...`
 - Klicken Sie dann auf `Repositories bearbeiten`
 - Im sich öffnenden Dialog _Plugin-Repositories_ dann auf `Neues Repository hinzufügen...`
-- Als URL für das neue Repository geben Sie dann Folgendes ein: 
-
->http://hibiscus.tvbrowser.org/
-
-Nachdem das Repository hinzugefügt wurde, wählen Sie im Tab `Verfügbar Plugins`
+- Als URL für das neue Repository geben Sie dann Folgendes ein: http://hibiscus.tvbrowser.org/
+- Nachdem das Repository hinzugefügt wurde, wählen Sie im Tab `Verfügbar Plugins`
 das hinzugefügte Repository aus.
-
-Das Plugin _Fidor-CSV_ wird angezeigt und kann über den Klick auf den Knopf `Installieren...` installiert werden.
+- Das Plugin _Fidor-CSV_ wird angezeigt und kann über den Klick auf den Knopf `Installieren...` installiert werden.
 
 Nach einem Neustart von Jameica sollte für Konten bei der Fidor Bank als Zugangsweg _Fidor-CSV_ automatisch eingestellt sein, so dass die Synchronisierung direkt gestartet werden kann.
 
