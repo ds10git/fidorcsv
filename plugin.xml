@@ -6,7 +6,7 @@
         name="hibiscus.sync.fidorcsv" version="0.3.0" class="org.jameica.hibiscus.sync.fidorcsv.Plugin">
 
   <description>Hibiscus-Support für Fidor CSV-Import</description>
-  <url>http://hibiscus.tvbrowser.org/download/hibiscus.sync.fidorcsv.zip</url>
+  <url>https://hibiscus.tvbrowser.org/download/hibiscus.sync.fidorcsv.zip</url>
   <homepage>https://github.com/ds10git/fidorcsv</homepage>
   <license>GPL v2</license>
 
